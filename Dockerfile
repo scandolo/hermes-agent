@@ -67,7 +67,8 @@ RUN mkdir -p /data/.hermes
 COPY server.py /app/server.py
 COPY templates/ /app/templates/
 COPY start.sh /app/start.sh
-RUN chmod +x /app/start.sh
+COPY brain-sync.sh /app/brain-sync.sh
+RUN chmod +x /app/start.sh /app/brain-sync.sh
 
 ENV HOME=/data
 ENV HERMES_HOME=/data/.hermes
