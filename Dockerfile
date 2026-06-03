@@ -69,6 +69,22 @@ RUN git clone --depth 1 --branch ${HERMES_REF} https://github.com/NousResearch/h
 COPY requirements.txt /app/requirements.txt
 RUN uv pip install --system --no-cache -r /app/requirements.txt
 
+# Pre-warm the provider SDK import in the gateway process to dodge a
+# concurrent-first-import race in upstream's lazy SDK loader. A Telegram
+# forum/Topics group fans one message into several topic sessions that build
+# agents on parallel executor threads; their simultaneous first `import
+# anthropic` can transiently fail, and `_get_anthropic_sdk()` caches that
+# failure for the whole process — every later message then errors with
+# "The 'anthropic' package is required" until restart. The .pth runs the warm
+# module at interpreter startup (single-threaded), turning the later lazy
+# import into a race-free sys.modules hit. See hermes_provider_warm.py.
+COPY hermes_provider_warm.py hermes_provider_warm.pth /app/
+RUN SP="$(python3 -c 'import site; print(site.getsitepackages()[0])')" && \
+    cp /app/hermes_provider_warm.py  "$SP/hermes_provider_warm.py" && \
+    cp /app/hermes_provider_warm.pth "$SP/hermes_provider_warm.pth" && \
+    python3 -c "import hermes_provider_warm" && \
+    echo "provider-warm installed to $SP"
+
 RUN mkdir -p /data/.hermes
 
 COPY server.py /app/server.py
