@@ -751,6 +751,7 @@ class Gateway:
         self.logs: deque[str] = deque(maxlen=500)
         self.started_at: float | None = None
         self.restarts = 0
+        self._fail_streak = 0
 
     async def start(self):
         if self.proc and self.proc.returncode is None:
@@ -804,9 +805,46 @@ class Gateway:
         async for raw in self.proc.stdout:
             line = ANSI_ESCAPE.sub("", raw.decode(errors="replace").rstrip())
             self.logs.append(line)
-        if self.state == "running":
+
+        # Pipe closed → process is exiting. Respect deliberate stops:
+        # stop()/restart() set state to "stopping"/"starting" before we get here.
+        if self.state != "running":
+            return
+
+        rc = self.proc.returncode
+        uptime = time.time() - self.started_at if self.started_at else 0
+        # Long uptime means this is a fresh failure, not a tight loop.
+        if uptime > 60:
+            self._fail_streak = 0
+        self._fail_streak += 1
+
+        if self._fail_streak > 5:
+            # Tight restart loops hammer Telegram getUpdates (409 conflicts)
+            # and burn Anthropic quota — bail out and require manual restart.
             self.state = "error"
-            self.logs.append(f"[error] Gateway exited (code {self.proc.returncode})")
+            self.logs.append(
+                f"[error] Gateway crash-looping ({self._fail_streak} failures, "
+                f"last exit code {rc}) — auto-restart paused, restart manually"
+            )
+            return
+
+        if rc == 75:
+            # Hermes "restart requested" (config save / MCP reload) — fast restart.
+            delay = 1.0
+        else:
+            # Exponential backoff: 1, 2, 4, 8, 16, capped at 30s.
+            delay = min(30.0, 2.0 ** (self._fail_streak - 1))
+
+        self.logs.append(
+            f"[info] Gateway exited (code {rc}), auto-restarting in {delay:.0f}s "
+            f"(attempt {self._fail_streak})"
+        )
+        await asyncio.sleep(delay)
+        # Re-check state after the sleep: a stop()/restart() may have arrived.
+        if self.state != "running":
+            return
+        self.restarts += 1
+        await self.start()
 
     def status(self) -> dict:
         uptime = int(time.time() - self.started_at) if self.started_at and self.state == "running" else None
