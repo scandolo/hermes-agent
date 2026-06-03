@@ -27,6 +27,13 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends nodejs && \
     rm -rf /var/lib/apt/lists/*
 
+# Railway CLI (~14MB) — used by Hermes self-mod skills to inspect/mutate the
+# service from within the container (set env vars, trigger redeploys, etc.).
+# Previously bootstrapped at runtime onto /data/.hermes/bin/railway, which made
+# the persistent volume a build artifact. Baking it into the image keeps the
+# volume for state only and makes the CLI reproducible across rebuilds.
+RUN npm install -g --silent @railway/cli
+
 # Install hermes-agent (provides the `hermes` CLI) and pre-build its React
 # dashboard so `hermes dashboard` has nothing to build at runtime.
 #
