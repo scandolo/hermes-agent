@@ -551,7 +551,13 @@ def is_config_complete(data: dict[str, str] | None = None) -> bool:
     if data is None:
         data = read_env(ENV_FILE)
     has_model = bool(data.get("LLM_MODEL"))
-    has_provider = any(data.get(k) for k in PROVIDER_KEYS) or _has_xai_oauth_tokens()
+    # Claude Code OAuth lives as a plain env var (not auth.json / not in PROVIDER_KEYS),
+    # so the gate needs to know about it explicitly — same shape as xAI's OAuth check.
+    has_provider = (
+        any(data.get(k) for k in PROVIDER_KEYS)
+        or _has_xai_oauth_tokens()
+        or bool(data.get("CLAUDE_CODE_OAUTH_TOKEN"))
+    )
     return has_model and has_provider
 
 
