@@ -771,7 +771,8 @@ class Gateway:
             env.update(read_env(ENV_FILE))
             model = env.get("LLM_MODEL", "")
             provider_key = next((env.get(k, "") for k in PROVIDER_KEYS if env.get(k)), "")
-            print(f"[gateway] model={model or '⚠ NOT SET'} | provider_key={'set' if provider_key else '⚠ NOT SET'}", flush=True)
+            has_provider = bool(provider_key) or _has_xai_oauth_tokens() or bool(env.get("CLAUDE_CODE_OAUTH_TOKEN"))
+            print(f"[gateway] model={model or '⚠ NOT SET'} | provider_key={'set' if has_provider else '⚠ NOT SET'}", flush=True)
             # Write config.yaml so hermes picks up the model (env vars alone aren't always enough)
             write_config_yaml(read_env(ENV_FILE))
             self.proc = await asyncio.create_subprocess_exec(
