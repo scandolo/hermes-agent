@@ -35,4 +35,13 @@ fi
 # container), so removing the file unconditionally is safe.
 rm -f /data/.hermes/gateway.pid
 
+# Two-way brain sync: push Hermes's knowledge/memory to a private GitHub repo
+# and pull back anything landed on origin/main (e.g. from Federico's Mac).
+# Self-disables if BRAIN_GIT_REMOTE / BRAIN_GIT_TOKEN aren't configured, so the
+# template still runs for anyone who hasn't set up sync. Backgrounded; tini
+# (PID 1) reaps it on shutdown.
+if [ -n "${BRAIN_GIT_REMOTE}" ] && [ -n "${BRAIN_GIT_TOKEN}" ]; then
+  /app/brain-sync.sh loop &
+fi
+
 exec python /app/server.py
